@@ -41,8 +41,11 @@ LEGISLATURA = "LXVI"
 DIRECTORIO_URL = BASE_URL + "listado_diputados_gpnp.php?tipot=TOTAL"
 PERIODOS_URL = BASE_URL + "votaciones_por_periodonplxvi.php"
 
-# Diputados que aparecen votando pero ya no están en el directorio
-# (licencias, renuncias o suplentes que cubrieron y salieron).
+# Estatus del cargo. El directorio TOTAL son los vigentes; quienes solo
+# aparecen en listados ya salieron (licencia, renuncia, suplente que
+# cubrió) y la curricula a veces lo indica con un sufijo "(LICENCIA)".
+ESTATUS_EN_FUNCIONES = "en funciones"
+ESTATUS_LICENCIA = "licencia"
 ESTATUS_NO_EN_DIRECTORIO = "no en directorio"
 
 MESES = {
@@ -69,6 +72,7 @@ _RE_LISTADO = re.compile(
 _RE_DIPT = re.compile(r"curricula\.php\?dipt=(\d+)")
 _RE_IDDIPT = re.compile(r"votaciones_por_pernplxvi\.php\?iddipt=(\d+)")
 _RE_FECHA = re.compile(r"(\d{1,2})\s+([A-Za-zÁÉÍÓÚáéíóúü]+)\s+(\d{4})")
+_RE_SUFIJO_NOMBRE = re.compile(r"^(.*?)\s*\(([^()]*)\)\s*$")
 
 
 @dataclass(frozen=True)
@@ -234,7 +238,9 @@ def parse_curricula(html: str, url: str) -> Legislador:
     """Ficha curricular → ``Legislador`` con nombre canónico y distrito.
 
     El partido viene de la imagen ``header-gp`` (``images/<siglas>.webp``).
-    Las curriculas de RP no traen Entidad; llevan ``Circunscripción``.
+    Las curriculas de RP no traen Entidad; llevan ``Circunscripción``. Un
+    sufijo entre paréntesis en el nombre ("(LICENCIA)") se retira y queda
+    en ``estatus``; ``_fetch`` decide el estatus final.
     """
     soup = BeautifulSoup(html, "html.parser")
     m = _RE_DIPT.search(url)
@@ -242,8 +248,13 @@ def parse_curricula(html: str, url: str) -> Legislador:
 
     h1 = soup.find("h1", class_="header-name")
     nombre = ""
+    estatus = None
     if h1 is not None:
         nombre = re.sub(r"^Dip\.?\s*", "", h1.get_text(" ", strip=True)).strip()
+        sufijo = _RE_SUFIJO_NOMBRE.match(nombre)
+        if sufijo:
+            nombre = sufijo.group(1).strip()
+            estatus = sufijo.group(2).strip().lower() or None
 
     h4 = soup.find("h4", class_="header-job")
     principio_txt = h4.get_text().lower() if h4 is not None else ""
@@ -276,11 +287,28 @@ def parse_curricula(html: str, url: str) -> Legislador:
         partido=partido,
         curul=_campo_curricula(soup, "Curul"),
         suplente=_campo_curricula(soup, "Suplente"),
+        estatus=estatus,
     )
 
 
 def _total(grupos: list[TotalGrupo], campo: str) -> int:
     return sum(getattr(g, campo) for g in grupos)
+
+
+def _ultimo_partido_en_votos(
+    dipt: str,
+    votos: list[Voto],
+    fecha_por_votacion: dict[str, date | None],
+) -> str | None:
+    """Partido del listado donde el diputado apareció por última vez."""
+    mejor: tuple[date, int, str] | None = None
+    for i, v in enumerate(votos):
+        if v.legislador_source_id != dipt or not v.partido:
+            continue
+        fecha = fecha_por_votacion.get(v.votacion_id) or date.min
+        if mejor is None or (fecha, i) > mejor[:2]:
+            mejor = (fecha, i, v.partido)
+    return mejor[2] if mejor else None
 
 
 def validar_sitl(datos: SitlDatos, secciones_csv: Path = SECCIONES_CSV) -> dict:
@@ -322,7 +350,7 @@ def validar_sitl(datos: SitlDatos, secciones_csv: Path = SECCIONES_CSV) -> dict:
         l
         for l in datos.legisladores
         if l.principio == Principio.MR
-        and l.estatus != ESTATUS_NO_EN_DIRECTORIO
+        and l.estatus == ESTATUS_EN_FUNCIONES
     ]
     pares = [(l.entidad, l.distrito_federal) for l in mr]
     conteo_pares = Counter(pares)
@@ -418,7 +446,9 @@ class SitlDiputados(Source):
         legisladores: dict[str, Legislador] = {}
         for i, (dipt, _, _) in enumerate(directorio, 1):
             html, url = self._texto(client, f"{BASE_URL}curricula.php?dipt={dipt}")
-            legisladores[dipt] = parse_curricula(html, url)
+            legisladores[dipt] = replace(
+                parse_curricula(html, url), estatus=ESTATUS_EN_FUNCIONES
+            )
             if i % 50 == 0:
                 logger.info("  curricula %d/%d", i, len(directorio))
 
@@ -503,10 +533,27 @@ class SitlDiputados(Source):
             html, url = self._texto(
                 client, f"{BASE_URL}curricula.php?dipt={dipt}"
             )
+            leg = parse_curricula(html, url)
             legisladores[dipt] = replace(
-                parse_curricula(html, url),
-                estatus=ESTATUS_NO_EN_DIRECTORIO,
+                leg, estatus=leg.estatus or ESTATUS_NO_EN_DIRECTORIO
             )
+
+        # Unas pocas curriculas no traen imagen de partido; se infiere del
+        # partidot del listado donde votaron por última vez.
+        fecha_por_votacion = {v.source_id: v.fecha for v in votaciones}
+        for leg in list(legisladores.values()):
+            if leg.partido is not None:
+                continue
+            ultimo = _ultimo_partido_en_votos(
+                leg.source_id, votos, fecha_por_votacion
+            )
+            if ultimo:
+                legisladores[leg.source_id] = replace(leg, partido=ultimo)
+                logger.info(
+                    "dipt=%s sin partido en la curricula → %s (último voto)",
+                    leg.source_id,
+                    ultimo,
+                )
 
         return SitlDatos(
             legisladores=tuple(

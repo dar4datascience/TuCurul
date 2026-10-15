@@ -23,11 +23,15 @@ from .sources.http import CacheMode, FetchError, HttpClient
 from .sources.models import write_csv
 from .sources.sitl_diputados import (
     BASE_URL as SITL_BASE_URL,
+)
+from .sources.sitl_diputados import (
     DIRECTORIO_URL,
-    LEGISLATURA as SITL_LEGISLATURA,
     PERIODOS_URL,
     SitlDiputados,
     validar_sitl,
+)
+from .sources.sitl_diputados import (
+    LEGISLATURA as SITL_LEGISLATURA,
 )
 from .states import DATA_DIR, get_state, load_states
 

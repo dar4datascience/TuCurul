@@ -1,6 +1,7 @@
 """Parsers e ingesta del SITL LXVI contra fixtures en bytes reales."""
 
 import csv
+import re
 from collections import Counter
 from datetime import date
 from pathlib import Path
@@ -20,6 +21,8 @@ from tucurul.sources.models import (
 from tucurul.sources.sitl_diputados import (
     BASE_URL,
     DIRECTORIO_URL,
+    ESTATUS_EN_FUNCIONES,
+    ESTATUS_LICENCIA,
     ESTATUS_NO_EN_DIRECTORIO,
     PERIODOS_URL,
     SitlDatos,
@@ -194,6 +197,18 @@ def test_parse_curricula_rp():
     assert leg.partido == "MORENA"
 
 
+def test_parse_curricula_licencia():
+    """Un sufijo "(LICENCIA)" sale del nombre y queda como estatus."""
+    texto, _ = fixture_text("curricula_dipt13.html")
+    leg = parse_curricula(texto, f"{BASE_URL}curricula.php?dipt=13")
+    assert leg.nombre == "Manuel Alejandro Cota Cárdenas"
+    assert leg.estatus == ESTATUS_LICENCIA
+    assert leg.partido == "PVEM"  # images/verde.webp
+    assert leg.principio is Principio.MR
+    assert leg.entidad == "03"  # Baja California Sur
+    assert leg.distrito_federal == 1
+
+
 def _fixture_transport() -> httpx.MockTransport:
     """Sirve los fixtures por URL; curricula desconocidas → dipt=1."""
     mapa = {
@@ -204,6 +219,7 @@ def _fixture_transport() -> httpx.MockTransport:
             "estadistico_votaciont2.html"
         ),
         f"{BASE_URL}curricula.php?dipt=1": "curricula_dipt1.html",
+        f"{BASE_URL}curricula.php?dipt=13": "curricula_dipt13.html",
         f"{BASE_URL}curricula.php?dipt=391": "curricula_dipt391.html",
     }
     for p in ["14", "3", "5", "4", "1", "6", "2", "9"]:
@@ -211,12 +227,18 @@ def _fixture_transport() -> httpx.MockTransport:
             f"{BASE_URL}listados_votacionesnplxvi.php?partidot={p}&votaciont=2"
         ] = f"listado_votaciont2_partidot{p}.html"
     curricula_mr = (FIXTURES / "curricula_dipt1.html").read_bytes()
+    # dipt=100 (votó en partidot=14) sin imagen de partido, como dipt=173
+    curricula_sin_partido = re.sub(
+        rb'<img[^>]+header-gp[^>]*>', b"", curricula_mr
+    )
 
     def handler(request: httpx.Request) -> httpx.Response:
         url = str(request.url)
         nombre = mapa.get(url)
         if nombre is not None:
             return httpx.Response(200, content=(FIXTURES / nombre).read_bytes())
+        if "curricula.php?dipt=100" in url:
+            return httpx.Response(200, content=curricula_sin_partido)
         if "curricula.php?dipt=" in url:
             return httpx.Response(200, content=curricula_mr)
         return httpx.Response(404)
@@ -239,9 +261,18 @@ def test_fetch_end_to_end(tmp_path):
     # directorio (10) + curriculas de quienes solo aparecen en votos
     assert len(datos.legisladores) == 10 + len(faltantes)
     por_id = {l.source_id: l for l in datos.legisladores}
+    assert all(por_id[i].estatus == ESTATUS_EN_FUNCIONES for i in ids_dir)
+    # dipt=13 trae "(LICENCIA)" en el nombre; el resto de faltantes no
+    assert por_id["13"].estatus == ESTATUS_LICENCIA
+    assert por_id["13"].nombre == "Manuel Alejandro Cota Cárdenas"
     assert all(
-        por_id[i].estatus == ESTATUS_NO_EN_DIRECTORIO for i in faltantes
+        por_id[i].estatus == ESTATUS_NO_EN_DIRECTORIO
+        for i in faltantes
+        if i != "13"
     )
+    # dipt=100 no tiene imagen de partido → la del último listado (MORENA)
+    assert por_id["100"].partido == "MORENA"
+    assert all(l.partido for l in datos.legisladores)
     assert len(datos.votaciones) == 1
     vot = datos.votaciones[0]
     assert vot.source_id == "2"
@@ -272,6 +303,7 @@ def test_validar_detecta_desajustes():
         source_url="u",
         distrito_federal=1,
         principio=Principio.MR,
+        estatus=ESTATUS_EN_FUNCIONES,
     )
     datos = SitlDatos(
         legisladores=(leg,),
@@ -366,7 +398,7 @@ def test_legisladores_ingeridos_cubren_300_mr():
     mr = []
     with open(ruta, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
-            if row["principio"] == "MR" and row["estatus"] != ESTATUS_NO_EN_DIRECTORIO:
+            if row["principio"] == "MR" and row["estatus"] == ESTATUS_EN_FUNCIONES:
                 mr.append((row["entidad"], int(row["distrito_federal"])))
     assert len(set(mr)) == 300
     assert set(mr) == pares_ine

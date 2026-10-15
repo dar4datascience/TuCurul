@@ -59,6 +59,7 @@ def test_sentido_desconocido_es_otro():
         ("MORENA", "MORENA"),
         ("Movimiento Ciudadano", "MC"),
         ("mc", "MC"),
+        ("Verde", "PVEM"),
         ("Partido Verde Ecologista de México", "PVEM"),
         ("Partido Acción Nacional", "PAN"),
         ("Partido Revolucionario Institucional", "PRI"),

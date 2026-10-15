@@ -169,6 +169,7 @@ PARTIDO_ALIAS: dict[str, str] = {
     "PT": "PT",
     "Partido del Trabajo": "PT",
     "PVEM": "PVEM",
+    "Verde": "PVEM",
     "Partido Verde": "PVEM",
     "Partido Verde Ecologista de México": "PVEM",
     "MC": "MC",
