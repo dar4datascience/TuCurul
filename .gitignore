@@ -76,6 +76,7 @@ data/raw/
 
 # Salidas de scrapers (se regeneran con `tucurul sitl-ingest`, etc.)
 data/sitl_diputados/
+data/senado/
 
 # Sitio estático generado (se despliega con GitHub Actions)
 site/

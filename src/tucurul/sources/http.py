@@ -173,6 +173,11 @@ def decode(content: bytes, content_type: str | None = None) -> tuple[str, str]:
 class HttpClient:
     """Cliente HTTP por fuente: cookies, rate limit, reintentos y caché.
 
+    ``reject`` es un predicado sobre el cuerpo para detectar páginas de
+    bloqueo anti-bot servidas con 2xx (p. ej. intersticiales de
+    Incapsula): se reintentan como si fueran 5xx, nunca se cachean y un
+    cuerpo cacheado que las satisfaga se ignora.
+
     Se usa como context manager::
 
         with HttpClient("sitl_diputados") as client:
@@ -191,6 +196,7 @@ class HttpClient:
         backoff: float = 2.0,
         user_agent: str = DEFAULT_USER_AGENT,
         plain_http_hosts: Iterable[str] = PLAIN_HTTP_HOSTS,
+        reject: Callable[[bytes], bool] | None = None,
         transport: httpx.BaseTransport | None = None,
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.monotonic,
@@ -202,6 +208,7 @@ class HttpClient:
         self.retries = retries
         self.backoff = backoff
         self.plain_http_hosts = frozenset(h.lower() for h in plain_http_hosts)
+        self.reject = reject
         self._sleep = sleep
         self._clock = clock
         self._last_request: dict[str, float] = {}
@@ -229,6 +236,12 @@ class HttpClient:
         key = hashlib.sha256(f"GET {request_url}".encode()).hexdigest()
         if self.mode is not CacheMode.REFRESH:
             cached = self._read_cache(key)
+            if (
+                cached is not None
+                and self.reject is not None
+                and self.reject(cached.content)
+            ):
+                cached = None  # página de bloqueo cacheada: se refetcha
             if cached is not None:
                 return cached
             if self.mode is CacheMode.OFFLINE:
@@ -288,12 +301,23 @@ class HttpClient:
                     raise FetchError(str(url), detalle=str(exc)) from exc
             else:
                 status = response.status_code
+                rechazada = False
                 if 200 <= status < 300:
-                    return response
-                if status != 429 and status < 500:
+                    if self.reject is None or not self.reject(response.content):
+                        return response
+                    rechazada = True
+                elif status != 429 and status < 500:
                     raise FetchError(str(url), status=status)
                 if attempt == self.retries:
-                    raise FetchError(str(url), status=status)
+                    raise FetchError(
+                        str(url),
+                        status=status,
+                        detalle=(
+                            "respuesta rechazada (página de bloqueo)"
+                            if rechazada
+                            else ""
+                        ),
+                    )
             self._sleep(self.backoff * 2**attempt)
         raise AssertionError("inalcanzable")
 

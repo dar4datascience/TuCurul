@@ -21,6 +21,16 @@ from .limits import MAX_TRACKED_DATA_BYTES, human_size, oversized_files
 from .site import build_site
 from .sources.http import CacheMode, FetchError, HttpClient
 from .sources.models import write_csv
+from .sources.senado import (
+    DATOS_ABIERTOS_URL as SENADO_DATOS_ABIERTOS_URL,
+)
+from .sources.senado import (
+    LEGISLATURA as SENADO_LEGISLATURA,
+)
+from .sources.senado import (
+    VOTACIONES_URL as SENADO_VOTACIONES_URL,
+)
+from .sources.senado import Senado, es_bloqueo_incapsula, validar_senado
 from .sources.sitl_diputados import (
     BASE_URL as SITL_BASE_URL,
 )
@@ -38,6 +48,31 @@ from .states import DATA_DIR, get_state, load_states
 COVERAGE_START = "<!-- coverage:start -->"
 COVERAGE_END = "<!-- coverage:end -->"
 README_PATH = DATA_DIR.parent / "README.md"
+
+
+def _cache_mode(args: argparse.Namespace) -> CacheMode:
+    """Modo de caché del cliente según --offline / --refresh."""
+    if args.offline:
+        return CacheMode.OFFLINE
+    if args.refresh:
+        return CacheMode.REFRESH
+    return CacheMode.NORMAL
+
+
+def _fetch_con_reintentos(fuente, intentos: int = 3):
+    """``fetch()`` con reintentos; la caché retoma donde quedó cada vez."""
+    for intento in range(1, intentos + 1):
+        try:
+            return fuente.fetch()
+        except FetchError as e:
+            if intento == intentos:
+                raise
+            print(
+                f"Intento {intento} falló ({e}); reintentando "
+                "desde la caché…",
+                file=sys.stderr,
+            )
+            time.sleep(30)
 
 
 def update_readme(path: Path) -> bool:
@@ -150,6 +185,32 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Procesa como máximo N votaciones (para pruebas)",
     )
+    senado = sub.add_parser(
+        "senado-ingest",
+        help="Ingesta el Senado LXVI: senadores y votaciones plenarias",
+    )
+    senado.add_argument(
+        "--out",
+        type=Path,
+        default=DATA_DIR / "senado",
+        help="Directorio de salida (por defecto data/senado/)",
+    )
+    senado.add_argument(
+        "--offline",
+        action="store_true",
+        help="Solo caché en data/raw/, sin red",
+    )
+    senado.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Ignora la caché y vuelve a descargar todo",
+    )
+    senado.add_argument(
+        "--max-votaciones",
+        type=int,
+        default=None,
+        help="Procesa como máximo N votaciones (para pruebas)",
+    )
     return parser
 
 
@@ -217,33 +278,13 @@ def main(argv: list[str] | None = None) -> None:
         )
     elif args.command == "sitl-ingest":
         logging.basicConfig(level=logging.INFO, format="%(message)s")
-        mode = (
-            CacheMode.OFFLINE
-            if args.offline
-            else CacheMode.REFRESH
-            if args.refresh
-            else CacheMode.NORMAL
-        )
-        client = HttpClient("sitl_diputados", mode=mode)
+        client = HttpClient("sitl_diputados", mode=_cache_mode(args))
         fuente = SitlDiputados(
             client=client, max_votaciones=args.max_votaciones
         )
         # La conectividad con diputados.gob.mx es intermitente; la caché
         # hace que cada reintento retome donde quedó.
-        datos = None
-        for intento in range(1, 4):
-            try:
-                datos = fuente.fetch()
-                break
-            except FetchError as e:
-                if intento == 3:
-                    raise
-                print(
-                    f"Intento {intento} falló ({e}); reintentando "
-                    "desde la caché…",
-                    file=sys.stderr,
-                )
-                time.sleep(30)
+        datos = _fetch_con_reintentos(fuente)
         client.close()
 
         args.out.mkdir(parents=True, exist_ok=True)
@@ -281,6 +322,65 @@ def main(argv: list[str] | None = None) -> None:
         if mismatches:
             print(
                 f"Desajustes votos vs estadístico ({len(mismatches)}):",
+                file=sys.stderr,
+            )
+            for m in mismatches[:50]:
+                print(f"  {m}", file=sys.stderr)
+            if len(mismatches) > 50:
+                print(f"  ... y {len(mismatches) - 50} más", file=sys.stderr)
+        if not validacion["ok"]:
+            print(
+                "Validación estructural fallida; ver metadata.json",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+    elif args.command == "senado-ingest":
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
+        client = HttpClient(
+            "senado", mode=_cache_mode(args), reject=es_bloqueo_incapsula
+        )
+        fuente = Senado(client=client, max_votaciones=args.max_votaciones)
+        # La caché hace que cada reintento retome donde quedó.
+        datos = _fetch_con_reintentos(fuente)
+        client.close()
+
+        args.out.mkdir(parents=True, exist_ok=True)
+        write_csv(args.out / "legisladores.csv", datos.legisladores)
+        write_csv(args.out / "votaciones.csv", datos.votaciones)
+        write_csv(args.out / "votos.csv", datos.votos)
+
+        validacion = validar_senado(datos)
+        metadata = {
+            "source": "senado",
+            "legislatura": SENADO_LEGISLATURA,
+            "source_urls": [
+                SENADO_DATOS_ABIERTOS_URL,
+                datos.datos_abiertos_url,
+                SENADO_VOTACIONES_URL,
+            ],
+            "datos_abiertos_url": datos.datos_abiertos_url,
+            "corte_datos_abiertos": datos.corte_datos_abiertos.isoformat(),
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "counts": {
+                "legisladores": len(datos.legisladores),
+                "votaciones": len(datos.votaciones),
+                "votos": len(datos.votos),
+            },
+            "validacion": validacion,
+        }
+        (args.out / "metadata.json").write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(
+            f"Senado {SENADO_LEGISLATURA}: {len(datos.legisladores)} "
+            f"legisladores, {len(datos.votaciones)} votaciones, "
+            f"{len(datos.votos)} votos → {args.out}"
+        )
+        mismatches = validacion["votos_vs_totales"]["mismatches"]
+        if mismatches:
+            print(
+                f"Desajustes votos vs totales ({len(mismatches)}):",
                 file=sys.stderr,
             )
             for m in mismatches[:50]:

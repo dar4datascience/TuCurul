@@ -61,6 +61,9 @@ class Legislador:
     estatus: str | None = None
     suplente: str | None = None
     curul: str | None = None
+    sexo: str | None = None
+    correo: str | None = None
+    telefono: str | None = None
 
 
 @dataclass(frozen=True)
@@ -177,7 +180,10 @@ PARTIDO_ALIAS: dict[str, str] = {
     "IND": "IND",
     "Independiente": "IND",
     "Sin Partido": "IND",
+    "Sin Grupo": "IND",
+    "Sin Grupo Parlamentario": "IND",
     "SP": "IND",
+    "SG": "IND",
 }
 
 _PARTIDO_INDEX = {_fold(alias): codigo for alias, codigo in PARTIDO_ALIAS.items()}
