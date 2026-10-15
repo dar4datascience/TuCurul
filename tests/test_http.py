@@ -258,6 +258,95 @@ def test_cookies_persistentes(tmp_path):
     assert b"sesion=abc" in resp.content
 
 
+def _es_bloqueo(content: bytes) -> bool:
+    """Predicado de prueba: simula la página de bloqueo de Incapsula."""
+    return b"BLOQUEO-ANTIBOT" in content
+
+
+def test_reject_reintenta_2xx_bloqueado(tmp_path):
+    """Un 2xx que satisface ``reject`` se reintenta como si fuera 5xx."""
+    llamadas = []
+
+    def handler(request):
+        llamadas.append(request)
+        if len(llamadas) == 1:
+            return httpx.Response(200, content=b"BLOQUEO-ANTIBOT")
+        return ok(request)
+
+    reloj = RelojFalso()
+    with cliente(
+        handler, tmp_path, reloj, retries=3, backoff=2.0, reject=_es_bloqueo
+    ) as c:
+        resp = c.get("https://ejemplo.test/")
+    assert resp.status == 200
+    assert resp.content == b"contenido"
+    assert len(llamadas) == 2
+    assert reloj.esperas == [2.0]
+    # solo la respuesta buena quedó en caché
+    bodies = list(tmp_path.glob("*.body"))
+    assert len(bodies) == 1
+    assert bodies[0].read_bytes() == b"contenido"
+
+
+def test_reject_agotado_es_fetch_error_sin_cache(tmp_path):
+    def handler(request):
+        return httpx.Response(200, content=b"BLOQUEO-ANTIBOT")
+
+    reloj = RelojFalso()
+    with (
+        cliente(
+            handler, tmp_path, reloj, retries=2, backoff=2.0,
+            reject=_es_bloqueo,
+        ) as c,
+        pytest.raises(FetchError) as exc,
+    ):
+        c.get("https://ejemplo.test/")
+    assert exc.value.status == 200
+    assert "bloqueo" in str(exc.value)
+    assert list(tmp_path.iterdir()) == []  # nunca se cachea lo rechazado
+
+
+def test_reject_cuerpo_cacheado_se_ignora(tmp_path):
+    """Una entrada cacheada que satisface ``reject`` se refetcha."""
+    llamadas = []
+
+    def handler(request):
+        llamadas.append(request)
+        return httpx.Response(
+            200, content=b"BLOQUEO-ANTIBOT" if len(llamadas) == 1 else b"contenido"
+        )
+
+    reloj = RelojFalso()
+    url = "https://ejemplo.test/pagina"
+    # sin reject, la página de bloqueo queda cacheada como válida
+    with cliente(handler, tmp_path, reloj) as c:
+        assert c.get(url).content == b"BLOQUEO-ANTIBOT"
+    # con reject, la entrada se ignora y se refetcha (auto-cura la caché)
+    with cliente(handler, tmp_path, reloj, reject=_es_bloqueo) as c:
+        resp = c.get(url)
+    assert resp.content == b"contenido"
+    assert not resp.from_cache
+    assert len(llamadas) == 2
+
+
+def test_reject_cuerpo_cacheado_offline_es_miss(tmp_path):
+    """En OFFLINE, una entrada cacheada rechazada es un CacheMiss."""
+    url = "https://ejemplo.test/pagina"
+    with cliente(ok, tmp_path, RelojFalso()) as c:
+        c.get(url)
+    # envenena el cuerpo cacheado como si hubiera entrado un bloqueo
+    key = next(p for p in tmp_path.glob("*.body"))
+    key.write_bytes(b"BLOQUEO-ANTIBOT")
+    with (
+        cliente(
+            ok, tmp_path, RelojFalso(), mode=CacheMode.OFFLINE,
+            reject=_es_bloqueo,
+        ) as c,
+        pytest.raises(CacheMiss),
+    ):
+        c.get(url)
+
+
 @pytest.mark.network
 def test_sitl_real(tmp_path):
     """Prueba el bundle TLS contra el SITL real (requiere red)."""
