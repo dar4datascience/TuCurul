@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TuCurul — ¿quién me representa y cómo vota?</title>
+<meta name="description" content="Localiza tus distritos electorales a partir de tu sección INE y consulta la completitud de datos legislativos por entidad.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<h1>TuCurul</h1>
+<p class="tagline">¿Quién me representa y cómo vota?</p>
+</header>
+<main>
+<section id="buscador" aria-labelledby="buscador-titulo">
+<h2 id="buscador-titulo">Encuentra tus distritos electorales</h2>
+<p>
+Con la <strong>entidad</strong> y la <strong>sección electoral</strong> que
+aparecen en tu credencial de elector (INE) puedes conocer tu distrito
+federal, tu distrito local y tu municipio.
+</p>
+<form id="form-seccion" action="#" method="get">
+<div class="campo">
+<label for="entidad">Entidad federativa</label>
+<select id="entidad" name="entidad" required>
+<option value="" disabled selected>Cargando…</option>
+</select>
+</div>
+<div class="campo">
+<label for="seccion">Sección electoral</label>
+<input id="seccion" name="seccion" type="number" min="1" step="1"
+       inputmode="numeric" required placeholder="p. ej. 1234">
+</div>
+<button type="submit">Buscar</button>
+</form>
+<div id="resultado" role="status" aria-live="polite"></div>
+<p class="nota">
+Los nombres de las personas que te representan en cada distrito se
+agregarán en una siguiente etapa (issue #1); por ahora se muestran los
+identificadores territoriales.
+</p>
+</section>
+<section id="completitud" aria-labelledby="completitud-titulo">
+<h2 id="completitud-titulo">Completitud de información por estado</h2>
+<p>
+Estado de consolidación de las fuentes de datos por entidad:
+✅ datos ingeridos · 🟡 fuente identificada · ⚠️ cobertura parcial ·
+❌ sin fuente.
+</p>
+<div class="tabla-contenedor">
+{{COBERTURA}}
+</div>
+<p class="nota">
+Catálogo territorial: Marco Geográfico Seccional del INE, corte
+{{CORTE}} · <a href="{{FUENTE_URL}}">archivo fuente</a>.
+</p>
+</section>
+</main>
+<footer>
+<p>TuCurul · datos públicos del INE · código bajo licencia GPLv3.</p>
+</footer>
+<script type="module" src="app.js"></script>
+</body>
+</html>

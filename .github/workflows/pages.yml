@@ -1,0 +1,62 @@
+name: GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - name: Instalar dependencias
+        run: uv sync --locked --all-extras
+      - name: Lint
+        run: uv run ruff check .
+      - name: Pruebas
+        run: uv run pytest
+      - name: Límites de tamaño
+        run: uv run tucurul check-sizes
+      - name: Construir sitio
+        run: uv run tucurul build-site --out site
+      - name: Configurar Pages
+        if: >-
+          (github.event_name == 'push' && github.ref == 'refs/heads/main')
+          || github.event_name == 'workflow_dispatch'
+        uses: actions/configure-pages@v6
+      - name: Subir artefacto de Pages
+        if: >-
+          (github.event_name == 'push' && github.ref == 'refs/heads/main')
+          || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    needs: test-build
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Desplegar a GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

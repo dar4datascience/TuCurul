@@ -1,0 +1,114 @@
+:root {
+  --texto: #1d2129;
+  --fondo: #fafaf7;
+  --acento: #6d2e46;
+  --borde: #d8d3cd;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--texto);
+  background: var(--fondo);
+  line-height: 1.5;
+}
+
+header {
+  background: var(--acento);
+  color: #fff;
+  padding: 1.5rem 1rem;
+}
+
+header h1 { margin: 0; font-size: 1.8rem; }
+.tagline { margin: 0.25rem 0 0; opacity: 0.9; }
+
+main {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+section { margin-bottom: 2.5rem; }
+
+form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin: 1rem 0;
+}
+
+.campo { display: flex; flex-direction: column; gap: 0.25rem; }
+
+label { font-weight: 600; font-size: 0.9rem; }
+
+select, input, button {
+  font: inherit;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--borde);
+  border-radius: 4px;
+  background: #fff;
+}
+
+button {
+  background: var(--acento);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}
+
+button:hover { filter: brightness(1.1); }
+
+#resultado dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  background: #fff;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  padding: 1rem;
+  max-width: 30rem;
+}
+
+#resultado dt { font-weight: 600; }
+#resultado dd { margin: 0; }
+
+.error {
+  color: #8a1f11;
+  background: #fdecea;
+  border: 1px solid #f5c6cb;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  max-width: 30rem;
+}
+
+.tabla-contenedor { overflow-x: auto; }
+
+table.cobertura {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  background: #fff;
+}
+
+table.cobertura th, table.cobertura td {
+  border: 1px solid var(--borde);
+  padding: 0.3rem 0.5rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+table.cobertura td:last-child { white-space: normal; min-width: 12rem; }
+table.cobertura thead th { background: #efe9e4; }
+table.cobertura tfoot td { font-weight: 700; background: #f5f0ec; }
+
+.nota { color: #555; font-size: 0.9rem; }
+
+footer {
+  border-top: 1px solid var(--borde);
+  padding: 1rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: #555;
+}

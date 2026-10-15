@@ -1,0 +1,8 @@
+{
+  "source_url": "https://cartografia.ine.mx/mapoteca/MGS_CCL/SHAPEFILE.7z",
+  "archive_sha256": "ca156dd14c83703706c310dabda1a906b952b071b7bb3c0b25ea25b6e09d176f",
+  "archive_size_bytes": 85681402,
+  "corte": "2025-01-31",
+  "rows": 71541,
+  "generated_at": "2026-10-15T00:08:29+00:00"
+}

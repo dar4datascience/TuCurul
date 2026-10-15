@@ -1,0 +1,33 @@
+clave,nombre,abreviatura,distritos_federales,senadores
+01,Aguascalientes,AGS,3,3
+02,Baja California,BC,9,3
+03,Baja California Sur,BCS,2,3
+04,Campeche,CAMP,2,3
+05,Coahuila,COAH,8,3
+06,Colima,COL,2,3
+07,Chiapas,CHIS,13,3
+08,Chihuahua,CHIH,9,3
+09,Ciudad de México,CDMX,22,3
+10,Durango,DGO,4,3
+11,Guanajuato,GTO,15,3
+12,Guerrero,GRO,8,3
+13,Hidalgo,HGO,7,3
+14,Jalisco,JAL,20,3
+15,México,MEX,40,3
+16,Michoacán,MICH,11,3
+17,Morelos,MOR,5,3
+18,Nayarit,NAY,3,3
+19,Nuevo León,NL,14,3
+20,Oaxaca,OAX,10,3
+21,Puebla,PUE,16,3
+22,Querétaro,QRO,6,3
+23,Quintana Roo,QROO,4,3
+24,San Luis Potosí,SLP,7,3
+25,Sinaloa,SIN,7,3
+26,Sonora,SON,7,3
+27,Tabasco,TAB,6,3
+28,Tamaulipas,TAMPS,8,3
+29,Tlaxcala,TLAX,3,3
+30,Veracruz,VER,19,3
+31,Yucatán,YUC,6,3
+32,Zacatecas,ZAC,4,3
