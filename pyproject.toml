@@ -5,7 +5,11 @@ description = "¿Quién me representa y cómo vota? Localizador de representante
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "GPL-3.0-only" }
-dependencies = []
+dependencies = [
+    "beautifulsoup4>=4.15.0",
+    "certifi>=2026.7.22",
+    "httpx>=0.28.1",
+]
 
 [project.optional-dependencies]
 ingest = [
@@ -24,12 +28,17 @@ packages = ["src/tucurul"]
 
 [dependency-groups]
 dev = [
+    "cryptography>=50.0.2",
     "pytest>=8.0",
     "ruff>=0.8",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "network: requiere red; excluida por defecto",
+]
+addopts = "-m 'not network'"
 
 [tool.ruff]
 target-version = "py312"

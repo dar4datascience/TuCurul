@@ -1,7 +1,11 @@
 """Línea de comandos ``tucurul``."""
 
 import argparse
+import json
+import logging
 import sys
+import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .coverage import load_coverage, render_markdown_table
@@ -15,6 +19,20 @@ from .geo.ine import (
 from .geo.seccion import IneMarcoGeograficoLocator
 from .limits import MAX_TRACKED_DATA_BYTES, human_size, oversized_files
 from .site import build_site
+from .sources.http import CacheMode, FetchError, HttpClient
+from .sources.models import write_csv
+from .sources.sitl_diputados import (
+    BASE_URL as SITL_BASE_URL,
+)
+from .sources.sitl_diputados import (
+    DIRECTORIO_URL,
+    PERIODOS_URL,
+    SitlDiputados,
+    validar_sitl,
+)
+from .sources.sitl_diputados import (
+    LEGISLATURA as SITL_LEGISLATURA,
+)
 from .states import DATA_DIR, get_state, load_states
 
 COVERAGE_START = "<!-- coverage:start -->"
@@ -106,6 +124,32 @@ def build_parser() -> argparse.ArgumentParser:
         "check-sizes",
         help="Verifica que data/ no exceda los límites de tamaño de GitHub",
     )
+    sitl = sub.add_parser(
+        "sitl-ingest",
+        help="Ingesta el SITL LXVI: directorio de diputados y votaciones",
+    )
+    sitl.add_argument(
+        "--out",
+        type=Path,
+        default=DATA_DIR / "sitl_diputados",
+        help="Directorio de salida (por defecto data/sitl_diputados/)",
+    )
+    sitl.add_argument(
+        "--offline",
+        action="store_true",
+        help="Solo caché en data/raw/, sin red",
+    )
+    sitl.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Ignora la caché y vuelve a descargar todo",
+    )
+    sitl.add_argument(
+        "--max-votaciones",
+        type=int,
+        default=None,
+        help="Procesa como máximo N votaciones (para pruebas)",
+    )
     return parser
 
 
@@ -171,6 +215,84 @@ def main(argv: list[str] | None = None) -> None:
             f"OK: ningún archivo de data/ excede "
             f"{human_size(MAX_TRACKED_DATA_BYTES)}."
         )
+    elif args.command == "sitl-ingest":
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
+        mode = (
+            CacheMode.OFFLINE
+            if args.offline
+            else CacheMode.REFRESH
+            if args.refresh
+            else CacheMode.NORMAL
+        )
+        client = HttpClient("sitl_diputados", mode=mode)
+        fuente = SitlDiputados(
+            client=client, max_votaciones=args.max_votaciones
+        )
+        # La conectividad con diputados.gob.mx es intermitente; la caché
+        # hace que cada reintento retome donde quedó.
+        datos = None
+        for intento in range(1, 4):
+            try:
+                datos = fuente.fetch()
+                break
+            except FetchError as e:
+                if intento == 3:
+                    raise
+                print(
+                    f"Intento {intento} falló ({e}); reintentando "
+                    "desde la caché…",
+                    file=sys.stderr,
+                )
+                time.sleep(30)
+        client.close()
+
+        args.out.mkdir(parents=True, exist_ok=True)
+        write_csv(args.out / "legisladores.csv", datos.legisladores)
+        write_csv(args.out / "votaciones.csv", datos.votaciones)
+        write_csv(args.out / "totales_grupo.csv", datos.totales)
+        write_csv(args.out / "votos.csv", datos.votos)
+
+        validacion = validar_sitl(datos)
+        metadata = {
+            "source": "sitl_diputados",
+            "legislatura": SITL_LEGISLATURA,
+            "base_url": SITL_BASE_URL,
+            "source_urls": [DIRECTORIO_URL, PERIODOS_URL],
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "counts": {
+                "legisladores": len(datos.legisladores),
+                "votaciones": len(datos.votaciones),
+                "totales_grupo": len(datos.totales),
+                "votos": len(datos.votos),
+            },
+            "validacion": validacion,
+        }
+        (args.out / "metadata.json").write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(
+            f"SITL {SITL_LEGISLATURA}: {len(datos.legisladores)} legisladores, "
+            f"{len(datos.votaciones)} votaciones, "
+            f"{len(datos.totales)} totales por grupo, "
+            f"{len(datos.votos)} votos → {args.out}"
+        )
+        mismatches = validacion["votos_vs_totales"]["mismatches"]
+        if mismatches:
+            print(
+                f"Desajustes votos vs estadístico ({len(mismatches)}):",
+                file=sys.stderr,
+            )
+            for m in mismatches[:50]:
+                print(f"  {m}", file=sys.stderr)
+            if len(mismatches) > 50:
+                print(f"  ... y {len(mismatches) - 50} más", file=sys.stderr)
+        if not validacion["ok"]:
+            print(
+                "Validación estructural fallida; ver metadata.json",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
 
 
 if __name__ == "__main__":
