@@ -65,9 +65,13 @@ def test_sentido_desconocido_es_otro():
         ("Partido Revolucionario Institucional", "PRI"),
         ("Partido de la Revolución Democrática", "PRD"),
         ("Partido del Trabajo", "PT"),
+        ("morena", "MORENA"),
         ("Sin Partido", "IND"),
         ("Independiente", "IND"),
         ("independiente", "IND"),
+        ("SG", "IND"),
+        ("Sin Grupo", "IND"),
+        ("Sin Grupo Parlamentario", "IND"),
         ("Fuerza por México", "FUERZA POR MÉXICO"),
     ],
 )
