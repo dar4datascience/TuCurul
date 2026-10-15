@@ -12,7 +12,7 @@ import json
 import shutil
 from pathlib import Path
 
-from .coverage import render_html_table
+from .coverage import render_html_footnotes, render_html_table
 from .geo.ine import INE_DIR, SECCIONES_CSV, SOURCE_URL
 from .limits import MAX_SITE_FILE_BYTES
 from .states import load_states
@@ -114,6 +114,7 @@ def build_site(
     index = (ASSETS_DIR / "index.html").read_text(encoding="utf-8")
     index = (
         index.replace("{{COBERTURA}}", render_html_table())
+        .replace("{{NOTAS_COBERTURA}}", render_html_footnotes())
         .replace("{{CORTE}}", html.escape(str(meta.get("corte", "desconocido"))))
         .replace("{{FUENTE_URL}}", html.escape(str(meta.get("source_url", SOURCE_URL))))
     )

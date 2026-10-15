@@ -84,7 +84,25 @@ button:hover { filter: brightness(1.1); }
   max-width: 30rem;
 }
 
-.tabla-contenedor { overflow-x: auto; }
+.tabla-contenedor {
+  overflow-x: auto;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: #fff;
+  /* Sombra que insinúa contenido a la derecha */
+  background-image:
+    linear-gradient(to right, #fff 30%, rgba(255, 255, 255, 0)),
+    linear-gradient(to left, #fff 30%, rgba(255, 255, 255, 0)),
+    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0)),
+    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0));
+  background-repeat: no-repeat;
+  background-size: 40px 100%, 40px 100%, 12px 100%, 12px 100%;
+  background-position: 0 0, 100% 0, 0 0, 100% 0;
+  background-attachment: local, local, scroll, scroll;
+}
+
+.tabla-contenedor table { margin: 0; }
+.tabla-contenedor:focus { outline: 2px solid var(--acento); outline-offset: 2px; }
 
 table.cobertura {
   border-collapse: collapse;
@@ -99,9 +117,24 @@ table.cobertura th, table.cobertura td {
   white-space: nowrap;
 }
 
+/* Columnas "Clave" y "Entidad" fijas al desplazar horizontalmente */
+table.cobertura .fija {
+  position: sticky;
+  left: 0;
+  background: #fff;
+  z-index: 1;
+}
+table.cobertura td.fija:nth-child(2),
+table.cobertura th.fija:nth-child(2) { left: 3rem; }
+table.cobertura thead th.fija { background: #efe9e4; }
+table.cobertura tfoot td.fija { background: #f5f0ec; }
+
 table.cobertura td:last-child { white-space: normal; min-width: 12rem; }
 table.cobertura thead th { background: #efe9e4; }
 table.cobertura tfoot td { font-weight: 700; background: #f5f0ec; }
+
+.notas-cobertura { font-size: 0.85rem; color: #444; }
+.notas-cobertura li { margin-bottom: 0.25rem; }
 
 .nota { color: #555; font-size: 0.9rem; }
 

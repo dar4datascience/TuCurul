@@ -8,7 +8,12 @@ import subprocess
 import pytest
 from expected import EXPECTED_DL, EXPECTED_SECCIONES
 
-from tucurul.coverage import CoverageRow, Status, render_html_table
+from tucurul.coverage import (
+    CoverageRow,
+    Status,
+    render_html_footnotes,
+    render_html_table,
+)
 from tucurul.geo.ine import SECCIONES_CSV
 from tucurul.geo.seccion import IneMarcoGeograficoLocator
 from tucurul.limits import MAX_SITE_FILE_BYTES
@@ -138,8 +143,10 @@ def test_html_table_escapes_notes():
     html = render_html_table(
         rows=[row], states=[s for s in load_states() if s.clave == "01"]
     )
-    assert "<script>alert(1)</script>" not in html
-    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    footnotes = render_html_footnotes([row])
+    assert "<script>alert(1)</script>" not in html + footnotes
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in footnotes
+    assert '<a href="#nota-1">1</a>' in html
 
 
 def test_lookup_js_with_node(site, tmp_path):

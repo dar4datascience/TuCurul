@@ -197,10 +197,18 @@ def render_html_table(
     headers = (
         ["Clave", "Entidad", "Dist. fed.", "Secciones", "Dist. loc."]
         + [_short_header(d) for d in dimensions]
-        + ["Completitud", "Notas"]
+        + ["Completitud"]
     )
+    notas = {row.clave: row.notas for row in rows if row.notas}
+    nota_num = {
+        clave: i + 1 for i, clave in enumerate([r.clave for r in rows if r.clave in notas])
+    }
+
     lines = ['<table class="cobertura">', "<thead>", "<tr>"]
-    lines += [f"<th>{html.escape(h)}</th>" for h in headers]
+    for i, h in enumerate(headers):
+        scope = "col"
+        cls = ' class="fija"' if i < 2 else ""
+        lines.append(f'<th scope="{scope}"{cls}>{html.escape(h)}</th>')
     lines += ["</tr>", "</thead>", "<tbody>"]
 
     for row in rows:
@@ -218,10 +226,15 @@ def render_html_table(
             ]
             + geo_cells
             + [STATUS_SYMBOL[row.statuses[d]] for d in dimensions]
-            + [f"{score(row):.1f}%", row.notas]
+            + [f"{score(row):.1f}%"]
         )
         lines.append('<tr class="fila-estado">')
-        lines += [f"<td>{html.escape(cell)}</td>" for cell in cells]
+        for i, cell in enumerate(cells):
+            extra = ""
+            if i == 1 and row.clave in notas:
+                extra = f'<sup><a href="#nota-{nota_num[row.clave]}">{nota_num[row.clave]}</a></sup>'
+            cls = ' class="fija"' if i < 2 else ""
+            lines.append(f"<td{cls}>{html.escape(cell)}{extra}</td>")
         lines.append("</tr>")
     lines.append("</tbody>")
 
@@ -234,12 +247,27 @@ def render_html_table(
     else:
         geo_totals = ["—", "—"]
     lines += ["<tfoot>", '<tr class="fila-total">']
-    lines += [
-        f"<td>{html.escape(c)}</td>"
-        for c in ["Σ", f"{len(states)} entidades", str(total_distritos)]
+    for i, cell in enumerate(
+        ["Σ", f"{len(states)} entidades", str(total_distritos)]
         + geo_totals
         + ["—"] * len(dimensions)
-        + ["", ""]
-    ]
+        + [""]
+    ):
+        cls = ' class="fija"' if i < 2 else ""
+        lines.append(f"<td{cls}>{html.escape(cell)}</td>")
     lines += ["</tr>", "</tfoot>", "</table>"]
     return "\n".join(lines)
+
+
+def render_html_footnotes(rows: list[CoverageRow] | None = None) -> str:
+    """Lista de notas por entidad, para acompañar a :func:`render_html_table`."""
+    rows = rows if rows is not None else load_coverage()
+    con_notas = [(r.clave, r.notas) for r in rows if r.notas]
+    if not con_notas:
+        return ""
+    items = "\n".join(
+        f'<li id="nota-{i}"><strong>{html.escape(clave)}:</strong> '
+        f"{html.escape(nota)}</li>"
+        for i, (clave, nota) in enumerate(con_notas, start=1)
+    )
+    return f'<ol class="notas-cobertura">\n{items}\n</ol>'
